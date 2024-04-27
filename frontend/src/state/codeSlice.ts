@@ -2,11 +2,12 @@ import { createSlice } from "@reduxjs/toolkit";
 import { INode, flattenTree } from "react-accessible-treeview";
 import { IFlatMetadata } from "react-accessible-treeview/dist/TreeView/utils";
 import { WorkspaceFile } from "#/services/fileService";
+import { getSettings } from "#/services/settings";
 
 export const initialState = {
   code: "",
   selectedIds: [] as number[],
-  workspaceFolder: { name: "" } as WorkspaceFile,
+  workspaceFolder: { name: getSettings().WORKSPACE_SUBDIR } as WorkspaceFile,
 };
 
 export const codeSlice = createSlice({

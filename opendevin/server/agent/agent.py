@@ -34,6 +34,7 @@ class AgentUnit:
     """
 
     sid: str
+    relative_workspace: str = ''
     event_stream: EventStream
     controller: Optional[AgentController] = None
     runtime: Optional[Runtime] = None
@@ -82,6 +83,10 @@ class AgentUnit:
 
         if action == ActionType.INIT:
             await self.create_controller(data)
+            if self.runtime:
+                self.runtime.set_workspace_subdir(
+                    data.get('args', {}).get('WORKSPACE_SUBDIR', '')
+                )
             await self.event_stream.add_event(
                 ChangeAgentStateAction(AgentState.INIT), EventSource.USER
             )
@@ -109,7 +114,6 @@ class AgentUnit:
         api_base = config.llm.base_url
         max_iterations = args.get(ConfigType.MAX_ITERATIONS, config.max_iterations)
         max_chars = args.get(ConfigType.MAX_CHARS, config.llm.max_chars)
-
         logger.info(f'Creating agent {agent_cls} using LLM {model}')
         llm = LLM(model=model, api_key=api_key, base_url=api_base)
         agent = Agent.get_cls(agent_cls)(llm)

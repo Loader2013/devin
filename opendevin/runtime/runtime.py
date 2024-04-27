@@ -33,13 +33,22 @@ from opendevin.runtime.browser.browser_env import BrowserEnv
 from opendevin.runtime.plugins import PluginRequirement
 
 
-def create_sandbox(sid: str = 'default', sandbox_type: str = 'exec') -> Sandbox:
+def create_sandbox(
+    sid: str = 'default',
+    sandbox_type: str = 'exec',
+) -> Sandbox:
     if sandbox_type == 'exec':
-        return DockerExecBox(sid=sid, timeout=config.sandbox_timeout)
+        return DockerExecBox(
+            sid=sid,
+            timeout=config.sandbox_timeout,
+        )
     elif sandbox_type == 'local':
         return LocalBox(timeout=config.sandbox_timeout)
     elif sandbox_type == 'ssh':
-        return DockerSSHBox(sid=sid, timeout=config.sandbox_timeout)
+        return DockerSSHBox(
+            sid=sid,
+            timeout=config.sandbox_timeout,
+        )
     elif sandbox_type == 'e2b':
         return E2BBox(timeout=config.sandbox_timeout)
     else:
@@ -63,6 +72,7 @@ class Runtime:
         sandbox: Sandbox | None = None,
     ):
         self.sid = sid
+        self.workspace_subdir = ''
         if sandbox is None:
             self.sandbox = create_sandbox(sid, config.sandbox_type)
             self._is_external_sandbox = False
@@ -73,6 +83,9 @@ class Runtime:
         self.event_stream = event_stream
         self.event_stream.subscribe(EventStreamSubscriber.RUNTIME, self.on_event)
         self._bg_task = asyncio.create_task(self._start_background_observation_loop())
+
+    def set_workspace_subdir(self, workspace_subdir: str):
+        self.workspace_subdir = workspace_subdir
 
     def close(self):
         if not self._is_external_sandbox:

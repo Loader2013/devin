@@ -3,17 +3,17 @@ import i18next from "i18next";
 import React, { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useSelector } from "react-redux";
-import { fetchAgents, fetchModels } from "#/api";
-import { AvailableLanguages } from "#/i18n";
+import { fetchAgents, fetchModels, fetchWorkspaceSubdirs } from "#/api";
 import { I18nKey } from "#/i18n/declaration";
 import { initializeAgent } from "#/services/agent";
-import { RootState } from "../../../store";
+import store, { RootState } from "../../../store";
 import AgentState from "../../../types/AgentState";
 import {
   Settings,
   getSettings,
   getDefaultSettings,
   getSettingsDifference,
+  getValueConverter,
   settingsAreUpToDate,
   maybeMigrateSettings,
   saveSettings,
@@ -21,6 +21,7 @@ import {
 import toast from "#/utils/toast";
 import BaseModal from "../base-modal/BaseModal";
 import SettingsForm from "./SettingsForm";
+import { updateWorkspace } from "#/state/codeSlice";
 
 interface SettingsProps {
   isOpen: boolean;
@@ -35,6 +36,7 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
   const [models, setModels] = React.useState<string[]>([]);
   const [agents, setAgents] = React.useState<string[]>([]);
   const [settings, setSettings] = React.useState<Settings>({} as Settings);
+  const [workspaceSubdirs, setWorkspaceSubdirs] = React.useState<string[]>([]);
   const [agentIsRunning, setAgentIsRunning] = React.useState<boolean>(false);
   const [loading, setLoading] = React.useState(true);
   const { curAgentState } = useSelector((state: RootState) => state.agent);
@@ -57,6 +59,7 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
       try {
         setModels(await fetchModels());
         setAgents(await fetchAgents());
+        setWorkspaceSubdirs(await fetchWorkspaceSubdirs());
       } catch (error) {
         console.error(error);
       } finally {
@@ -79,13 +82,12 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
     setSettings((prev) => ({ ...prev, AGENT: agent }));
   };
 
+  const handleWorkspaceChange = (workspaceSubdir: string) => {
+    setSettings((prev) => ({ ...prev, WORKSPACE_SUBDIR: workspaceSubdir }));
+  };
+
   const handleLanguageChange = (language: string) => {
-    const key =
-      AvailableLanguages.find((lang) => lang.label === language)?.value ||
-      language;
-    // The appropriate key is assigned when the user selects a language.
-    // Otherwise, their input is reflected in the inputValue field of the Autocomplete component.
-    setSettings((prev) => ({ ...prev, LANGUAGE: key }));
+    setSettings((prev) => ({ ...prev, LANGUAGE: language }));
   };
 
   const handleAPIKeyChange = (key: string) => {
@@ -97,7 +99,7 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
   };
 
   const handleSaveSettings = () => {
-    const updatedSettings = getSettingsDifference(settings);
+    const updatedSettings = getSettingsDifference(getSettings(), settings);
     saveSettings(settings);
     i18next.changeLanguage(settings.LANGUAGE);
     initializeAgent(); // reinitialize the agent with the new settings
@@ -106,12 +108,18 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
 
     Object.entries(updatedSettings).forEach(([key, value]) => {
       if (!sensitiveKeys.includes(key)) {
-        toast.settingsChanged(`${key} set to "${value}"`);
+        toast.settingsChanged(
+          `${key} set to ${getValueConverter(key as keyof Settings)(value)}`,
+        );
       } else {
         toast.settingsChanged(`${key} has been updated securely.`);
       }
     });
-
+    if (Object.hasOwn(updatedSettings, "WORKSPACE_SUBDIR")) {
+      store.dispatch(
+        updateWorkspace({ name: updatedSettings.WORKSPACE_SUBDIR }),
+      );
+    }
     localStorage.setItem(
       `API_KEY_${settings.LLM_MODEL || models[0]}`,
       settings.LLM_API_KEY,
@@ -169,10 +177,12 @@ function SettingsModal({ isOpen, onOpenChange }: SettingsProps) {
           settings={settings}
           models={models}
           agents={agents}
+          workspaceSubdirs={workspaceSubdirs}
           onModelChange={handleModelChange}
           onAgentChange={handleAgentChange}
           onLanguageChange={handleLanguageChange}
           onAPIKeyChange={handleAPIKeyChange}
+          onWorkspaceChange={handleWorkspaceChange}
         />
       )}
     </BaseModal>

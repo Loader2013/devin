@@ -1,11 +1,12 @@
-import React from "react";
-import { render, waitFor, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import React from "react";
 import { act } from "react-dom/test-utils";
-import { describe, it, expect, vi, Mock } from "vitest";
-import FileExplorer from "./FileExplorer";
+import { renderWithProviders } from "test-utils";
+import { Mock, describe, expect, it, vi } from "vitest";
 import { getWorkspace, uploadFiles } from "#/services/fileService";
 import toast from "#/utils/toast";
+import FileExplorer from "./FileExplorer";
 
 const toastSpy = vi.spyOn(toast, "stickyError");
 
@@ -27,7 +28,9 @@ describe("FileExplorer", () => {
   });
 
   it("should get the workspace directory", async () => {
-    const { getByText } = render(<FileExplorer onFileClick={vi.fn} />);
+    const { getByText } = renderWithProviders(
+      <FileExplorer onFileClick={vi.fn} />,
+    );
 
     expect(getWorkspace).toHaveBeenCalledTimes(1);
     await waitFor(() => {
@@ -39,7 +42,7 @@ describe("FileExplorer", () => {
 
   it("calls the onFileClick function when a file is clicked", async () => {
     const onFileClickMock = vi.fn();
-    const { getByText } = render(
+    const { getByText } = renderWithProviders(
       <FileExplorer onFileClick={onFileClickMock} />,
     );
 
@@ -61,7 +64,7 @@ describe("FileExplorer", () => {
 
   it("should refetch the workspace when clicking the refresh button", async () => {
     const onFileClickMock = vi.fn();
-    render(<FileExplorer onFileClick={onFileClickMock} />);
+    renderWithProviders(<FileExplorer onFileClick={onFileClickMock} />);
 
     // The 'await' keyword is required here to avoid a warning during test runs
     await act(() => {
@@ -72,7 +75,7 @@ describe("FileExplorer", () => {
   });
 
   it("should toggle the explorer visibility when clicking the close button", async () => {
-    const { getByTestId, getByText, queryByText } = render(
+    const { getByTestId, getByText, queryByText } = renderWithProviders(
       <FileExplorer onFileClick={vi.fn} />,
     );
 
@@ -91,7 +94,9 @@ describe("FileExplorer", () => {
 
   it("should upload files", async () => {
     // TODO: Improve this test by passing expected argument to `uploadFiles`
-    const { getByTestId } = render(<FileExplorer onFileClick={vi.fn} />);
+    const { getByTestId } = renderWithProviders(
+      <FileExplorer onFileClick={vi.fn} />,
+    );
     const file = new File([""], "file-name");
     const file2 = new File([""], "file-name-2");
 

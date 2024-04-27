@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from opendevin.events.action import (
     AgentRecallAction,
     BrowseInteractiveAction,
@@ -47,13 +49,21 @@ class ServerRuntime(Runtime):
         return IPythonRunCellObservation(content=obs.content, code=action.code)
 
     async def read(self, action: FileReadAction) -> Observation:
-        working_dir = self.sandbox.get_working_directory()
+        working_dir = str(
+            Path(self.sandbox.get_working_directory(), self.workspace_subdir)
+        )
         return await read_file(action.path, working_dir, action.start, action.end)
 
     async def write(self, action: FileWriteAction) -> Observation:
-        working_dir = self.sandbox.get_working_directory()
+        working_dir = str(
+            Path(self.sandbox.get_working_directory(), self.workspace_subdir)
+        )
         return await write_file(
-            action.path, working_dir, action.content, action.start, action.end
+            action.path,
+            working_dir,
+            action.content,
+            action.start,
+            action.end,
         )
 
     async def browse(self, action: BrowseURLAction) -> Observation:
