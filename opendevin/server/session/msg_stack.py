@@ -61,9 +61,9 @@ class MessageStack:
             return 0
         cnt = 0
         for msg in self._messages[sid]:
-            # Ignore assistant init message for now.
             if 'action' in msg.payload and msg.payload['action'] in [
                 ActionType.INIT,
+                ActionType.RECONNECT,
                 ActionType.CHANGE_TASK_STATE,
             ]:
                 continue

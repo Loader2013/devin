@@ -1,15 +1,17 @@
 import { Tooltip } from "@nextui-org/react";
 import React, { useEffect } from "react";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import ArrowIcon from "#/assets/arrow";
 import PauseIcon from "#/assets/pause";
 import PlayIcon from "#/assets/play";
 import { changeTaskState } from "#/services/agentStateService";
 import { clearMsgs } from "#/services/session";
 import { clearMessages } from "#/state/chatSlice";
-import store, { RootState } from "#/store";
+import { RootState } from "#/store";
 import AgentTaskAction from "#/types/AgentTaskAction";
 import AgentTaskState from "#/types/AgentTaskState";
+import { initializeAgent } from "#/services/agent";
+import { getSettings } from "#/services/settings";
 
 const TaskStateActionMap = {
   [AgentTaskAction.START]: AgentTaskState.RUNNING,
@@ -46,6 +48,7 @@ interface ButtonProps {
   action: AgentTaskAction;
   handleAction: (action: AgentTaskAction) => void;
   large?: boolean;
+  isLoading?: boolean;
 }
 
 function ActionButton({
@@ -55,13 +58,14 @@ function ActionButton({
   handleAction,
   children,
   large,
+  isLoading,
 }: React.PropsWithChildren<ButtonProps>): React.ReactNode {
   return (
     <Tooltip content={content} closeDelay={100}>
       <button
         onClick={() => handleAction(action)}
         disabled={isDisabled}
-        className={`${large ? "rounded-full bg-neutral-800 p-3" : ""} hover:opacity-80 transition-all`}
+        className={`${large ? "rounded-full bg-neutral-800 p-3" : ""} ${isLoading ? "animate-spin" : ""} hover:opacity-80 transition-all disabled:cursor-not-allowed`}
         type="button"
       >
         {children}
@@ -72,14 +76,26 @@ function ActionButton({
 
 ActionButton.defaultProps = {
   large: false,
+  isLoading: false,
 };
 
 function AgentControlBar() {
+  const dispatch = useDispatch();
+  const { initialized } = useSelector((state: RootState) => state.task);
   const { curTaskState } = useSelector((state: RootState) => state.agent);
   const [desiredState, setDesiredState] = React.useState(AgentTaskState.INIT);
   const [isLoading, setIsLoading] = React.useState(false);
 
-  const handleAction = (action: AgentTaskAction) => {
+  const handleReset = async () => {
+    if (!initialized) return;
+
+    initializeAgent(getSettings());
+    // act = AgentTaskAction.STOP;
+    await clearMsgs();
+    dispatch(clearMessages());
+  };
+
+  const handleAction = async (action: AgentTaskAction) => {
     if (IgnoreTaskStateMap[action].includes(curTaskState)) {
       return;
     }
@@ -88,8 +104,8 @@ function AgentControlBar() {
 
     if (act === AgentTaskAction.STOP) {
       act = AgentTaskAction.STOP;
-      clearMsgs().then().catch();
-      store.dispatch(clearMessages());
+      await clearMsgs();
+      dispatch(clearMessages());
     } else {
       setIsLoading(true);
     }
@@ -99,15 +115,17 @@ function AgentControlBar() {
   };
 
   useEffect(() => {
-    if (curTaskState === desiredState) {
-      if (curTaskState === AgentTaskState.STOPPED) {
-        clearMsgs().then().catch();
-        store.dispatch(clearMessages());
+    (async () => {
+      if (curTaskState === desiredState) {
+        if (curTaskState === AgentTaskState.STOPPED) {
+          await clearMsgs();
+          dispatch(clearMessages());
+        }
+        setIsLoading(false);
+      } else if (curTaskState === AgentTaskState.RUNNING) {
+        setDesiredState(AgentTaskState.RUNNING);
       }
-      setIsLoading(false);
-    } else if (curTaskState === AgentTaskState.RUNNING) {
-      setDesiredState(AgentTaskState.RUNNING);
-    }
+    })();
     // We only want to run this effect when curTaskState changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [curTaskState]);
@@ -142,10 +160,11 @@ function AgentControlBar() {
         </ActionButton>
       )}
       <ActionButton
-        isDisabled={isLoading}
-        content="Restart a new agent task"
+        isDisabled={!initialized}
+        isLoading={!initialized}
+        content="Reinitialize the agent task"
         action={AgentTaskAction.STOP}
-        handleAction={handleAction}
+        handleAction={handleReset}
       >
         <ArrowIcon />
       </ActionButton>

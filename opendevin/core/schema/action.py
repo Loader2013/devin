@@ -8,6 +8,11 @@ class ActionTypeSchema(BaseModel):
     """Initializes the agent. Only sent by client.
     """
 
+    RECONNECT: str = Field(default='reconnect')
+    """Reconnects to the already initialized agent. Only try to reconnect.
+    If the agent is not initialized, it behaves like INIT.
+    """
+
     USER_MESSAGE: str = Field(default='user_message')
     """Sends a message from the user. Only sent by the client.
     """
