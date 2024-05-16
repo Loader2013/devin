@@ -83,7 +83,9 @@ class ServerRuntime(Runtime):
 
     def _run_immediately(self, command: str) -> Observation:
         try:
-            exit_code, output = self.sandbox.execute(command)
+            exit_code, output = self.sandbox.execute(
+                command, workspace_subdir=self.workspace_subdir
+            )
             return CmdOutputObservation(
                 command_id=-1, content=output, command=command, exit_code=exit_code
             )

@@ -346,9 +346,13 @@ class DockerSSHBox(Sandbox):
             f'Command: "{cmd}" timed out. Sending SIGINT to the process: {command_output}',
         )
 
-    def execute(self, cmd: str, timeout: int | None = None) -> tuple[int, str]:
+    def execute(
+        self, cmd: str, timeout: int | None = None, workspace_subdir: str = ''
+    ) -> tuple[int, str]:
         timeout = timeout if timeout is not None else self.timeout
-
+        workdir = str(Path(self.sandbox_workspace_dir, workspace_subdir))
+        self.ssh.sendline(f'cd {workdir}', hack=True)
+        self.ssh.prompt()
         commands = split_bash_commands(cmd)
         if len(commands) > 1:
             all_output = ''

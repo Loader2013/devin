@@ -39,7 +39,10 @@ class LocalBox(Sandbox):
         atexit.register(self.cleanup)
         super().__init__()
 
-    def execute(self, cmd: str, timeout: int | None = None) -> tuple[int, str]:
+    def execute(
+        self, cmd: str, timeout: int | None = None, workspace_subdir: str = ''
+    ) -> tuple[int, str]:
+        workdir = str(Path(self.workspace, workspace_subdir))
         timeout = timeout if timeout is not None else self.timeout
         try:
             completed_process = subprocess.run(
@@ -48,7 +51,7 @@ class LocalBox(Sandbox):
                 text=True,
                 capture_output=True,
                 timeout=timeout,
-                cwd=self.workspace,
+                cwd=workdir,
                 env=self._env,
             )
             return completed_process.returncode, completed_process.stdout.strip()

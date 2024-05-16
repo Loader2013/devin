@@ -108,14 +108,15 @@ class DockerExecBox(Sandbox):
         bg_cmd = self.background_commands[id]
         return bg_cmd.read_logs()
 
-    def execute(self, cmd: str, timeout: int | None = None) -> tuple[int, str]:
+    def execute(
+        self, cmd: str, timeout: int | None = None, workspace_subdir: str = ''
+    ) -> tuple[int, str]:
         timeout = timeout if timeout is not None else self.timeout
+        workdir = str(Path(self.sandbox_workspace_dir, workspace_subdir))
 
         # TODO: each execute is not stateful! We need to keep track of the current working directory
         def run_command(container, command):
-            return container.exec_run(
-                command, workdir=self.sandbox_workspace_dir, environment=self._env
-            )
+            return container.exec_run(command, workdir=workdir, environment=self._env)
 
         # Use ThreadPoolExecutor to control command and set timeout
         with concurrent.futures.ThreadPoolExecutor() as executor:
@@ -132,7 +133,7 @@ class DockerExecBox(Sandbox):
                 if pid is not None:
                     self.container.exec_run(
                         f'kill -9 {pid}',
-                        workdir=self.sandbox_workspace_dir,
+                        workdir=workdir,
                         environment=self._env,
                     )
                 return -1, f'Command: "{cmd}" timed out'

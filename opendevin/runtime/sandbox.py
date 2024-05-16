@@ -19,7 +19,9 @@ class Sandbox(ABC, PluginMixin):
         self._env[key] = value
 
     @abstractmethod
-    def execute(self, cmd: str, timeout: int | None = None) -> tuple[int, str]:
+    def execute(
+        self, cmd: str, timeout: int | None = None, workspace_subdir: str = ''
+    ) -> tuple[int, str]:
         pass
 
     @abstractmethod
