@@ -226,23 +226,32 @@ async def del_messages(
 
 
 @app.get('/api/refresh-files')
-def refresh_files():
+def refresh_files(workspace_subdir: str = ''):
     """
-    Refresh files.
+    Get the file and folder structure of the given workspace subdirectory.
+    If the subdirectory is not given, the entire workspace is returned.
 
-    To refresh files:
+    Example:
     ```sh
-    curl http://localhost:3000/api/refresh-files
+    curl http://localhost:3000/api/refresh-files?workspace_subdir=<subdirectory>
     ```
     """
-    structure = files.get_folder_structure(Path(str(config.workspace_base)))
+    p = Path(config.workspace_base, workspace_subdir)
+    structure = files.get_folder_structure(p)
     return structure.to_dict()
+
+
+@app.get('/api/workspace-subdirs')
+def get_workspace_subdirs():
+    return sorted(
+        [d.name for d in files.get_subdirectories(Path(config.workspace_base))]
+    )
 
 
 @app.get('/api/select-file')
 def select_file(file: str):
     """
-    Select a file.
+    Reads the content of the file under the given path, relative to the workspace root.
 
     To select a file:
     ```sh
@@ -267,19 +276,19 @@ def select_file(file: str):
 
 
 @app.post('/api/upload-files')
-async def upload_files(files: list[UploadFile]):
+async def upload_files(files: list[UploadFile], workspace_subdir: str):
     """
     Upload files to the workspace.
 
     To upload files:
     ```sh
-    curl -X POST -F "file=@<file_path1>" -F "file=@<file_path2>" http://localhost:3000/api/upload-files
+    curl -X POST -F "file=@<file_path1>" -F "file=@<file_path2>" http://localhost:3000/api/upload-files?workspace_subdir=<subdirectory>
     ```
     """
     try:
         workspace_base = config.workspace_base
         for file in files:
-            file_path = Path(workspace_base, file.filename)
+            file_path = Path(workspace_base, workspace_subdir, file.filename)
             # The following will check if the file is within the workspace base and throw an exception if not
             file_path.resolve().relative_to(Path(workspace_base).resolve())
             with open(file_path, 'wb') as buffer:

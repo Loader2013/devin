@@ -1,12 +1,14 @@
-import React from "react";
+import React, { useCallback } from "react";
 import {
   IoIosArrowBack,
   IoIosArrowForward,
-  IoIosRefresh,
   IoIosCloudUpload,
+  IoIosRefresh,
 } from "react-icons/io";
 import { IoFileTray } from "react-icons/io5";
 import { twMerge } from "tailwind-merge";
+import { useSelector } from "react-redux";
+import toast from "#/utils/toast";
 import {
   WorkspaceFile,
   getWorkspace,
@@ -15,7 +17,7 @@ import {
 import IconButton from "../IconButton";
 import ExplorerTree from "./ExplorerTree";
 import { removeEmptyNodes } from "./utils";
-import toast from "#/utils/toast";
+import { RootState } from "#/store";
 
 interface ExplorerActionsProps {
   onRefresh: () => void;
@@ -96,11 +98,13 @@ function FileExplorer({ onFileClick }: FileExplorerProps) {
   const [isDragging, setIsDragging] = React.useState(false);
 
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const getWorkspaceData = async () => {
-    const wsFile = await getWorkspace();
+  const { agent: curAgentState, code: codeState } = useSelector(
+    (state: RootState) => state,
+  );
+  const getWorkspaceData = useCallback(async () => {
+    const wsFile = await getWorkspace(codeState.workspaceFolder.name);
     setWorkspace(removeEmptyNodes(wsFile));
-  };
+  }, [codeState.workspaceFolder.name]);
 
   const selectFileInput = async () => {
     // Trigger the file browser
@@ -109,7 +113,7 @@ function FileExplorer({ onFileClick }: FileExplorerProps) {
 
   const uploadFileData = async (files: FileList) => {
     try {
-      await uploadFiles(files);
+      await uploadFiles(codeState.workspaceFolder.name, files);
       await getWorkspaceData(); // Refresh the workspace to show the new file
     } catch (error) {
       toast.stickyError("ws", "Error uploading file");
@@ -136,7 +140,7 @@ function FileExplorer({ onFileClick }: FileExplorerProps) {
       document.removeEventListener("dragenter", enableDragging);
       document.removeEventListener("drop", disableDragging);
     };
-  }, []);
+  }, [curAgentState, getWorkspaceData]);
 
   return (
     <div className="relative">
@@ -165,7 +169,13 @@ function FileExplorer({ onFileClick }: FileExplorerProps) {
             {workspace && (
               <ExplorerTree
                 root={workspace}
-                onFileClick={onFileClick}
+                onFileClick={(path) =>
+                  onFileClick(
+                    (codeState.workspaceFolder.name
+                      ? `${codeState.workspaceFolder.name}/`
+                      : "") + path,
+                  )
+                }
                 defaultOpen
               />
             )}

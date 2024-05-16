@@ -12,16 +12,19 @@ export async function selectFile(file: string): Promise<string> {
   return data.code as string;
 }
 
-export async function uploadFiles(files: FileList) {
+export async function uploadFiles(workspaceSubdir: string, files: FileList) {
   const formData = new FormData();
   for (let i = 0; i < files.length; i += 1) {
     formData.append("files", files[i]);
   }
 
-  const res = await fetch("/api/upload-files", {
-    method: "POST",
-    body: formData,
-  });
+  const res = await fetch(
+    `/api/upload-files?workspace_subdir=${workspaceSubdir}`,
+    {
+      method: "POST",
+      body: formData,
+    },
+  );
 
   const data = await res.json();
 
@@ -30,8 +33,12 @@ export async function uploadFiles(files: FileList) {
   }
 }
 
-export async function getWorkspace(): Promise<WorkspaceFile> {
-  const res = await fetch("/api/refresh-files");
+export async function getWorkspace(
+  workspaceSubdir: string,
+): Promise<WorkspaceFile> {
+  const res = await fetch(
+    `/api/refresh-files?workspace_subdir=${workspaceSubdir}`,
+  );
   const data = await res.json();
   return data as WorkspaceFile;
 }
