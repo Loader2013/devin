@@ -1,7 +1,7 @@
 // import { toast } from "sonner";
 import toast from "#/utils/toast";
 import { handleAssistantMessage } from "./actions";
-import { getToken } from "./auth";
+import { getToken, setToken, clearToken } from "./auth";
 
 class Socket {
   private static _socket: WebSocket | null = null;
@@ -24,18 +24,8 @@ class Socket {
   public static tryInitialize(): void {
     if (Socket.initializing) return;
     Socket.initializing = true;
-    getToken()
-      .then((token) => {
-        Socket._initialize(token);
-      })
-      .catch(() => {
-        const msg = `Connection failed. Retry...`;
-        toast.stickyError("ws", msg);
-
-        setTimeout(() => {
-          this.tryInitialize();
-        }, 1500);
-      });
+    const token = getToken();
+    Socket._initialize(token);
   }
 
   private static _initialize(token: string): void {
@@ -53,7 +43,21 @@ class Socket {
     };
 
     Socket._socket.onmessage = (e) => {
-      handleAssistantMessage(e.data);
+      let data = null;
+      try {
+        data = JSON.parse(e.data);
+      } catch (err) {
+        // TODO: report the error
+        console.error("Error parsing JSON data", err);
+        return;
+      }
+      if (data.error && data.error_code === 401) {
+        clearToken();
+      } else if (data.token) {
+        setToken(data.token);
+      } else {
+        handleAssistantMessage(data);
+      }
     };
 
     Socket._socket.onerror = () => {
