@@ -108,6 +108,35 @@ def test_ipython():
     os.getenv('SANDBOX_TYPE') != 'ssh',
     reason='Currently, only ssh sandbox supports stateful tasks',
 )
+def test_ipython_installation():
+    try:
+        # Execute the task
+        # 1. To ignore the cache to ensure that the tests are consistent on every run.
+        # 2. To ignore the installation log that is too long, which may cause the LLM completion to fail.
+        task = "Use Jupyter IPython to pip install --no-cache-dir pandas > /dev/null 2>&1, create a DataFrame with the 'Names' ['Alice', 'Bob'], and write it to '/workspace/names.txt'. Do not ask me for confirmation at any point."
+        asyncio.run(main(task, exit_on_message=True))
+
+        # Verify the file exists
+        file_path = os.path.join(workspace_base, 'names.txt')
+        assert os.path.exists(file_path), 'The file "names.txt" does not exist'
+
+        # Verify the file contains the expected content
+        with open(file_path, 'r') as f:
+            content = f.read()
+        assert (
+            content.strip() == 'Names\nAlice\nBob'
+        ), f'Expected content "Names\nAlice\nBob", but got "{content.strip()}"'
+    finally:
+        os.remove(os.path.join(workspace_base, 'names.txt'))
+
+@pytest.mark.skipif(
+    os.getenv('AGENT') != 'CodeActAgent',
+    reason='currently only CodeActAgent defaults to have IPython (Jupyter) execution',
+)
+@pytest.mark.skipif(
+    os.getenv('SANDBOX_TYPE') != 'ssh',
+    reason='Currently, only ssh sandbox supports stateful tasks',
+)
 def test_ipython_module():
     # Execute the task
     task = "Install and import pymsgbox==1.0.9 and print it's version in /workspace/test.txt. Do not ask me for confirmation at any point."
@@ -124,3 +153,4 @@ def test_ipython_module():
     assert (
         content.strip() == '1.0.9'
     ), f'Expected content "1.0.9", but got "{content.strip()}"'
+
