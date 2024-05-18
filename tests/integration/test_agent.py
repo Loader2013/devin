@@ -17,6 +17,10 @@ workspace_base = os.getenv('WORKSPACE_BASE')
     and os.getenv('SANDBOX_TYPE').lower() == 'exec',
     reason='CodeActAgent does not support exec sandbox since exec sandbox is NOT stateful',
 )
+@pytest.mark.skipif(
+    os.getenv('AGENT') == 'ManagerAgent',
+    reason='Manager agent is not capable of finishing this in reasonable steps yet',
+)
 def test_write_simple_script():
     task = "Write a shell script 'hello.sh' that prints 'hello'. Do not ask me for confirmation at any point."
     final_state: State = asyncio.run(main(task, exit_on_message=True))
@@ -98,6 +102,18 @@ def test_ipython():
     assert (
         content.strip() == 'hello world'
     ), f'Expected content "hello world", but got "{content.strip()}"'
+
+
+@pytest.mark.skipif(
+    os.getenv('AGENT') != 'ManagerAgent',
+    reason='Currently, only ManagerAgent supports task rejection',
+)
+def test_simple_task_rejection():
+    # Give an impossible task to do: cannot write a commit message because
+    # the workspace is not a git repo
+    task = 'Write a git commit message for the current staging area. Do not ask me for confirmation at any point.'
+    final_agent_state = asyncio.run(main(task))
+    assert final_agent_state == AgentState.FINISHED
 
 
 @pytest.mark.skipif(

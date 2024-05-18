@@ -17,6 +17,7 @@ from opendevin.events.action import (
     AddTaskAction,
     AgentDelegateAction,
     AgentFinishAction,
+    AgentRejectAction,
     ChangeAgentStateAction,
     MessageAction,
     ModifyTaskAction,
@@ -134,6 +135,9 @@ class AgentController:
         elif isinstance(event, AgentFinishAction):
             self.state.outputs = event.outputs  # type: ignore[attr-defined]
             await self.set_agent_state_to(AgentState.FINISHED)
+        elif isinstance(event, AgentRejectAction):
+            self.state.outputs = event.outputs  # type: ignore[attr-defined]
+            await self.set_agent_state_to(AgentState.REJECTED)
         elif isinstance(event, Observation):
             if self._pending_action and self._pending_action.id == event.cause:
                 await self.add_history(self._pending_action, event)
