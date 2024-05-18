@@ -73,58 +73,73 @@ MONOLOGUE_SUMMARY_PROMPT = """
 Below is the internal monologue of an automated LLM agent. Each
 thought is an item in a JSON array. The thoughts may be memories,
 actions taken by the agent, or outputs from those actions.
-Please return a new, smaller JSON array, which summarizes the
-internal monologue. You can summarize individual thoughts, and
-you can condense related thoughts together with a description
-of their content.
+
+The monologue has two parts: the default memories, which you must not change,
+they are provided to you only for context, and the recent monologue.
+
+Please return a new, much smaller JSON array that summarizes the recent monologue.
+When summarizing, you should condense the events that appear earlier
+in the recent monologue list more aggressively, while preserving more details
+for the events that appear later in the list.
+
+You can summarize individual thoughts, and you can condense related thoughts
+together with a description of their content.
 
 %(monologue)s
 
-Make the summaries as pithy and informative as possible.
+Make the summaries as pithy and informative as possible, especially for the earlier events
+in the old monologue.
+
 Be specific about what happened and what was learned. The summary
 will be used as keywords for searching for the original memory.
 Be sure to preserve any key words or important information.
 
-Your response must be in JSON format. It must be an object with the
-key `new_monologue`, which is a JSON array containing the summarized monologue.
-Each entry in the array must have an `action` key, and an `args` key.
-The action key may be `summarize`, and `args.summary` should contain the summary.
-You can also use the same action and args from the source monologue.
+Your response must be in JSON format. It must be an object with the key `new_monologue`,
+which must be a smaller JSON array containing the summarized monologue.
+Each entry in the new monologue must have an `action` key, and an `args` key.
+You can add a summarized entry with `action` set to "summarize" and a concise summary
+in `args.summary`. You can also use the source recent event if relevant, with its original `action` and `args`.
+
+Remember you must only summarize the old monologue, not the default memories.
 """
 
 
-def get_summarize_monologue_prompt(thoughts: list[dict]):
+def get_summarize_prompt(default_events: list[dict], recent_events: list[dict]):
     """
     Gets the prompt for summarizing the monologue
 
     Returns:
-    - str: A formatted string with the current monologue within the prompt
+    - A formatted string with the current monologue within the prompt
     """
     return MONOLOGUE_SUMMARY_PROMPT % {
-        'monologue': json.dumps({'old_monologue': thoughts}, indent=2),
+        'monologue': json.dumps(
+            {'default_memories': default_events, 'old_monologue': recent_events},
+            indent=2,
+        ),
     }
 
 
-def get_request_action_prompt(
+def get_action_prompt(
     task: str,
-    thoughts: list[dict],
-    background_commands_obs: list[CmdOutputObservation] = [],
+    default_events: list[dict],
+    recent_events: list[dict],
+    background_commands_obs: list[CmdOutputObservation],
 ):
     """
     Gets the action prompt formatted with appropriate values.
 
     Parameters:
-    - task (str): The current task the agent is trying to accomplish
-    - thoughts (list[dict]): The agent's current thoughts
-    - background_commands_obs (list[CmdOutputObservation]): list of all observed background commands running
+    - task: The current task the agent is trying to accomplish
+    - thoughts: The agent's current thoughts
+    - background_commands_obs: list of all observed background commands running
 
     Returns:
     - str: Formatted prompt string with hint, task, monologue, and background included
     """
 
     hint = ''
-    if len(thoughts) > 0:
-        latest_thought = thoughts[-1]
+    if recent_events is not None and len(recent_events) > 0:
+        latest_thought = recent_events[-1]
         if 'action' in latest_thought:
             if latest_thought['action'] == 'message':
                 if latest_thought['args']['content'].startswith('OK so my task is'):
@@ -134,26 +149,42 @@ def get_request_action_prompt(
             elif latest_thought['action'] == 'error':
                 hint = 'Looks like that last command failed. Maybe you need to fix it, or try something else.'
 
-    bg_commands_message = ''
-    if len(background_commands_obs) > 0:
-        bg_commands_message = 'The following commands are running in the background:'
-        for command_obs in background_commands_obs:
-            bg_commands_message += (
-                f'\n`{command_obs.command_id}`: {command_obs.command}'
-            )
-        bg_commands_message += '\nYou can end any process by sending a `kill` action with the numerical `command_id` above.'
+    bg_commands_message = format_background_commands(background_commands_obs)
 
     user = 'opendevin' if config.run_as_devin else 'root'
 
     return ACTION_PROMPT % {
         'task': task,
-        'monologue': json.dumps(thoughts, indent=2),
+        'monologue': json.dumps(default_events + recent_events, indent=2),
         'background_commands': bg_commands_message,
         'hint': hint,
         'user': user,
         'timeout': config.sandbox_timeout,
-        'WORKSPACE_MOUNT_PATH_IN_SANDBOX': config.workspace_mount_path_in_sandbox,
+        'workspace_mount_path_in_sandbox': config.workspace_mount_path_in_sandbox,
     }
+
+
+def format_background_commands(
+    background_commands_obs: list[CmdOutputObservation] | None,
+) -> str:
+    """
+    Formats the background commands for sending in the prompt
+
+    Parameters:
+    - background_commands_obs: list of all background commands running
+
+    Returns:
+    - Formatted string with all background commands
+    """
+    if background_commands_obs is None or len(background_commands_obs) == 0:
+        return ''
+
+    bg_commands_message = 'The following commands are running in the background:'
+    for obs in background_commands_obs:
+        bg_commands_message += f'\n`{obs.command_id}`: {obs.command}'
+    bg_commands_message += '\nYou can end any process by sending a `kill` action with the numerical `command_id` above.'
+
+    return bg_commands_message
 
 
 def parse_action_response(orig_response: str) -> Action:
@@ -161,10 +192,10 @@ def parse_action_response(orig_response: str) -> Action:
     Parses a string to find an action within it
 
     Parameters:
-    - response (str): The string to be parsed
+    - orig_response: The string to be parsed
 
     Returns:
-    - Action: The action that was found in the response string
+    - The action that was found in the response string
     """
     # attempt to load the JSON dict from the response
     action_dict = json.loads(orig_response)
@@ -181,10 +212,10 @@ def parse_summary_response(response: str) -> list[dict]:
     Parses a summary of the monologue
 
     Parameters:
-    - response (str): The response string to be parsed
+    - response: The response string to be parsed
 
     Returns:
-    - list[dict]: The list of summaries output by the model
+    - The list of summaries output by the model
     """
     parsed = json.loads(response)
     return parsed['new_monologue']

@@ -30,7 +30,6 @@ from opendevin.memory.history import ShortTermHistory
 if config.agent.memory_enabled:
     from opendevin.memory.memory import LongTermMemory
 
-MAX_TOKEN_COUNT_PADDING = 512
 MAX_OUTPUT_LENGTH = 5000
 
 INITIAL_THOUGHTS = [
@@ -100,15 +99,29 @@ class MonologueAgent(Agent):
         """
         super().__init__(llm)
 
+    def _add_default_event(self, event_dict: dict):
+        """
+        Adds a default event to the agent's monologue and memory.
+
+        Default events are not condensed and are used to give the LLM context and examples.
+
+        Parameters:
+        - event_dict: The event that will be added to monologue and memory
+        """
+        self.monologue.add_default_event(event_dict)
+        if self.memory is not None:
+            self.memory.add_event(event_dict)
+
     def _add_event(self, event_dict: dict):
         """
         Adds a new event to the agent's monologue and memory.
         Monologue automatically condenses when it gets too large.
 
         Parameters:
-        - event (dict): The event that will be added to monologue and memory
+        - event_dict: The event that will be added to monologue and memory
         """
 
+        # truncate output if it's too long
         if (
             'args' in event_dict
             and 'output' in event_dict['args']
@@ -118,25 +131,27 @@ class MonologueAgent(Agent):
                 event_dict['args']['output'][:MAX_OUTPUT_LENGTH] + '...'
             )
 
+        # add event to short term history
         self.monologue.add_event(event_dict)
+
+        # add event to long term memory
         if self.memory is not None:
             self.memory.add_event(event_dict)
 
-        # Test monologue token length
-        prompt = prompts.get_request_action_prompt(
-            '',
-            self.monologue.get_events(),
-            [],
-        )
-        messages = [{'content': prompt, 'role': 'user'}]
-        token_count = self.llm.get_token_count(messages)
-
-        if token_count + MAX_TOKEN_COUNT_PADDING > self.llm.max_input_tokens:
-            prompt = prompts.get_summarize_monologue_prompt(self.monologue.events)
-            summary_response = self.memory_condenser.condense(
-                summarize_prompt=prompt, llm=self.llm
+        # summarize the short term history (events) if necessary
+        if self.memory_condenser.needs_condense(
+            llm=self.llm,
+            default_events=self.monologue.get_default_events(),
+            recent_events=self.monologue.get_recent_events(),
+        ):
+            condensed_events, was_summarized = self.memory_condenser.condense(
+                llm=self.llm,
+                default_events=self.monologue.get_default_events(),
+                recent_events=self.monologue.get_recent_events(),
+                background_commands=None,
             )
-            self.monologue.events = prompts.parse_summary_response(summary_response)
+            if was_summarized is True and condensed_events is not None:
+                self.monologue.recent_events = condensed_events.copy()
 
     def _initialize(self, task: str):
         """
@@ -146,7 +161,7 @@ class MonologueAgent(Agent):
         Will execute again when called after reset.
 
         Parameters:
-        - task (str): The initial goal statement provided by the user
+        - task: The initial goal statement provided by the user
 
         Raises:
         - AgentNoInstructionError: If task is not provided
@@ -164,7 +179,10 @@ class MonologueAgent(Agent):
         else:
             self.memory = None
 
-        self.memory_condenser = MemoryCondenser()
+        self.memory_condenser = MemoryCondenser(
+            action_prompt=prompts.get_action_prompt,
+            summarize_prompt=prompts.get_summarize_prompt,
+        )
 
         self._add_initial_thoughts(task)
         self._initialized = True
@@ -187,7 +205,7 @@ class MonologueAgent(Agent):
                     observation = BrowserOutputObservation(
                         content=thought, url='', screenshot=''
                     )
-                self._add_event(event_to_memory(observation))
+                self._add_default_event(event_to_memory(observation))
                 previous_action = ''
             else:
                 action: Action = NullAction()
@@ -214,30 +232,34 @@ class MonologueAgent(Agent):
                     previous_action = ActionType.BROWSE
                 else:
                     action = MessageAction(thought)
-                self._add_event(event_to_memory(action))
+                self._add_default_event(event_to_memory(action))
 
     def step(self, state: State) -> Action:
         """
         Modifies the current state by adding the most recent actions and observations, then prompts the model to think about it's next action to take using monologue, memory, and hint.
 
         Parameters:
-        - state (State): The current state based on previous steps taken
+        - state: The current state based on previous steps taken
 
         Returns:
-        - Action: The next action to take based on LLM response
+        - The next action to take based on LLM response
         """
 
         goal = state.get_current_user_intent()
         self._initialize(goal)
+
+        # add the most recent actions and observations to the agent's memory
         for prev_action, obs in state.updated_info:
             self._add_event(event_to_memory(prev_action))
             self._add_event(event_to_memory(obs))
 
+        # clean info for this step
         state.updated_info = []
 
-        prompt = prompts.get_request_action_prompt(
+        prompt = prompts.get_action_prompt(
             goal,
-            self.monologue.get_events(),
+            self.monologue.get_default_events(),
+            self.monologue.get_recent_events(),
             state.background_commands_obs,
         )
         messages = [{'content': prompt, 'role': 'user'}]
@@ -254,10 +276,10 @@ class MonologueAgent(Agent):
         Uses search to produce top 10 results.
 
         Parameters:
-        - query (str): The query that we want to find related memories for
+        - The query that we want to find related memories for
 
         Returns:
-        - list[str]: A list of top 10 text results that matched the query
+        - A list of top 10 text results that matched the query
         """
         if self.memory is None:
             return []
